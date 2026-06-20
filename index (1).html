@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>Niam's Slayer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent;
+       -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #000;
+    font-family: 'Courier New', monospace; color: #ffcc66;
+    touch-action: none; overscroll-behavior: none;
+  }
+  #game {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    background: #000; display: block; z-index: 1;
+  }
+  #flash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(255,0,0,0) 100%);
+    opacity: 0; transition: opacity 0.08s linear;
+  }
+  #hud {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: flex; justify-content: space-between; align-items: stretch;
+    padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(20,10,8,0.0), rgba(20,10,8,0.85) 30%);
+    z-index: 10; pointer-events: none; font-size: 11px; gap: 6px;
+  }
+  .stat {
+    background: rgba(40,20,16,0.85); border: 1.5px solid #5a2a1a;
+    border-radius: 3px; padding: 2px 6px; min-width: 44px;
+    text-align: center; box-shadow: inset 0 0 4px rgba(0,0,0,0.7);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .stat .label { font-size: 7px; color: #aa6644; letter-spacing: 1px; }
+  .stat .val   { font-size: 14px; font-weight: bold; line-height: 1; text-shadow: 0 0 3px #000; }
+  .stat.health .val { color: #ff5544; }
+  .stat.armor  .val { color: #44aaff; }
+  .stat.ammo   .val { color: #ffdd44; }
+  .stat.weapon .val { color: #ffcc66; font-size: 10px; }
+  .stat.keys .val { color: #ff4444; font-size: 10px; }
+  #faceWrap {
+    background: rgba(40,20,16,0.85); border: 1.5px solid #5a2a1a; border-radius: 3px;
+    padding: 1px; display: flex; align-items: center; justify-content: center;
+  }
+  #face { width: 32px; height: 38px; image-rendering: pixelated; }
+  #crosshair {
+    position: fixed; top: 50%; left: 50%; width: 14px; height: 14px;
+    transform: translate(-50%,-50%); z-index: 6; pointer-events: none; opacity: 0.6;
+    transition: opacity 0.05s;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: #ff6644; box-shadow: 0 0 2px #000;
+    transition: background 0.05s;
+  }
+  #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+  #crosshair::after  { top: 6px; left: 0; height: 2px; width: 14px; }
+  #crosshair.hit { opacity: 1; }
+  #crosshair.hit::before, #crosshair.hit::after { background: #ffee44; box-shadow: 0 0 6px #ffaa00; }
+
+  #controls { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+  #stickZone { position: absolute; left: 0; top: 0; width: 50%; height: 100%; pointer-events: auto; z-index: 1; }
+  #stickBase, #stickKnob {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    transform: translate(-50%,-50%); display: none; z-index: 3;
+  }
+  #stickBase { width: 120px; height: 120px; border: 2px solid rgba(255,180,80,0.5); background: rgba(80,40,20,0.25); }
+  #stickKnob { width: 54px; height: 54px; background: rgba(255,180,80,0.5); border: 2px solid rgba(255,220,150,0.8); }
+  #lookZone { position: absolute; right: 0; top: 0; width: 50%; height: 100%; pointer-events: auto; z-index: 1; }
+  .zoneHint { position: absolute; color: rgba(255,180,80,0.16); font-size: 10px; letter-spacing: 2px; pointer-events: none; text-transform: uppercase; }
+  #hintMove { left: 16px; bottom: 90px; }
+  #hintLook { right: 16px; bottom: 90px; }
+  #actions { position: absolute; right: 14px; bottom: calc(74px + env(safe-area-inset-bottom)); display: flex; gap: 12px; pointer-events: auto; z-index: 4; }
+  .btn {
+    width: 66px; height: 66px; border-radius: 50%;
+    background: rgba(60,30,20,0.55); border: 2px solid rgba(255,180,80,0.7);
+    color: #ffcc66; font-size: 10px; font-weight: bold; letter-spacing: 1px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; line-height: 1.1; backdrop-filter: blur(2px);
+    box-shadow: 0 0 10px rgba(0,0,0,0.6); -webkit-touch-callout: none; touch-action: manipulation;
+  }
+  .btn:active, .btn.active { background: rgba(255,80,40,0.6); transform: scale(0.94); }
+  .btn .ico { font-size: 22px; line-height: 1; margin-bottom: 2px; }
+  #btnShoot { width: 82px; height: 82px; background: rgba(120,30,20,0.55); border-color: rgba(255,80,60,0.85); }
+  body.portrait #hud { top: 0; bottom: auto; background: linear-gradient(180deg, rgba(20,10,8,0.85) 0%, rgba(20,10,8,0) 100%); padding-top: calc(3px + env(safe-area-inset-top)); padding-bottom: 3px; }
+  body.portrait #hud .stat { min-width: 36px; padding: 1px 4px; }
+  body.portrait #hud .stat .val { font-size: 12px; }
+  body.portrait #hud .stat.weapon .val { font-size: 9px; }
+  body.portrait #face { width: 26px; height: 30px; }
+  body.portrait #actions { right: 10px; bottom: calc(64px + env(safe-area-inset-bottom)); gap: 8px; }
+  body.portrait .btn { width: 56px; height: 56px; font-size: 9px; }
+  body.portrait .btn .ico { font-size: 18px; }
+  body.portrait #btnShoot { width: 68px; height: 68px; }
+  body.portrait #stickBase { width: 100px; height: 100px; }
+  body.portrait #stickKnob { width: 46px; height: 46px; }
+  body.portrait #hintMove, body.portrait #hintLook { bottom: 76px; font-size: 9px; }
+  #overlay {
+    position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,0.85);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 20px; gap: 14px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 42px; letter-spacing: 6px; color: #ff3322; text-shadow: 0 0 14px rgba(255,40,20,0.7), 3px 3px 0 #440000; }
+  #overlay h2 { font-size: 22px; color: #ffcc66; letter-spacing: 3px; }
+  #overlay p  { font-size: 13px; color: #aa8866; max-width: 360px; line-height: 1.6; }
+  #overlay .controls-help { font-size: 11px; color: #886644; text-align: left; max-width: 320px; border: 1px solid #442211; padding: 10px 14px; border-radius: 4px; line-height: 1.7; }
+  #overlay .controls-help b { color: #ffcc66; }
+  #startBtn { margin-top: 8px; padding: 14px 32px; font-size: 18px; font-weight: bold; background: #882211; color: #ffddaa; border: 3px solid #ff6644; border-radius: 6px; letter-spacing: 3px; cursor: pointer; font-family: inherit; box-shadow: 0 0 18px rgba(255,60,30,0.6); }
+  #startBtn:active { transform: scale(0.96); }
+  #muteBtn { position: fixed; top: 8px; right: 8px; z-index: 11; width: 36px; height: 36px; border-radius: 50%; background: rgba(40,20,16,0.85); border: 2px solid #5a2a1a; color: #ffcc66; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; pointer-events: auto; }
+</style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="flash"></div>
+  <div id="crosshair"></div>
+  <div id="muteBtn" title="Mute">♪</div>
+  <div id="hud">
+    <div class="stat health"><div class="label">HEALTH</div><div class="val" id="hudHealth">100</div></div>
+    <div class="stat armor"><div class="label">ARMOR</div><div class="val" id="hudArmor">0</div></div>
+    <div id="faceWrap"><canvas id="face" width="24" height="28"></canvas></div>
+    <div class="stat ammo"><div class="label">AMMO</div><div class="val" id="hudAmmo">50</div></div>
+    <div class="stat weapon"><div class="label">WEAPON</div><div class="val" id="hudWeapon">PISTOL</div></div>
+    <div class="stat keys"><div class="label">KEYS</div><div class="val" id="hudKeys">0</div></div>
+  </div>
+  <div id="controls">
+    <div id="stickZone"><div id="stickBase"></div><div id="stickKnob"></div></div>
+    <div id="lookZone"></div>
+    <div class="zoneHint" id="hintMove">◄ MOVE ►</div>
+    <div class="zoneHint" id="hintLook">◄ LOOK ►</div>
+    <div id="actions">
+      <div class="btn" id="btnWeapon"><span class="ico">↻</span>WEAPON</div>
+      <div class="btn" id="btnInteract"><span class="ico">□</span>USE</div>
+      <div class="btn" id="btnShoot"><span class="ico">✲</span>FIRE</div>
+    </div>
+  </div>
+  <div id="overlay">
+    <h1>NIAM'S SLAYER</h1>
+    <h2 id="ovSub">DESCEND INTO THE MAZE</h2>
+    <p id="ovMsg">Find the exit. Kill everything in your way. Don't die.</p>
+    <div class="controls-help">
+      <b>MOBILE (landscape &amp; portrait):</b><br>
+      • Left side — drag to move &amp; strafe<br>
+      • Right side — drag to turn left/right + look up/down<br>
+      • Bottom-right buttons — FIRE / USE / WEAPON<br>
+      • Multi-touch: move + look + shoot at once<br><br>
+      <b>DESKTOP:</b><br>
+      • WASD — move &amp; strafe · Arrows — turn + look<br>
+      • Mouse — look (click to lock) · Space — fire<br>
+      • E — use door · Q — switch weapon
+    </div>
+    <button id="startBtn">START</button>
+  </div>
+<script>
+'use strict';
+/* ===========================================================================
+   NIAM'S SLAYER — mobile raycasting FPS
+   Sections:
+     1. Config & state
+     2. Audio (WebAudio SFX)
+     3. Procedural map generator
+     4. Procedural textures
+     5. Procedural sprites
+     6. HUD face
+     7. Rendering (walls + sprites + weapon + pitch + doors)
+     8. Gameplay (player, enemies, projectiles, doors, keys, pickups, weapons)
+     9. Input (touch + keyboard + mouse)
+    10. Loop & UI
+   =========================================================================== */
+
+/* 1. CONFIG & STATE */
+const FOV = Math.PI / 3, HALF_FOV = FOV / 2;
+const MOVE_SPEED = 2.6, STRAFE_SPEED = 2.0, ROT_SPEED = 2.6;
+const PITCH_SPEED = 1.8;
+const PLAYER_RADIUS = 0.22;
+const TEX = 32;
+let RW = 200, RH = 120;
+let canvas, ctx, buf, zbuf;
+let lastT = 0;
+
+const game = {
+  state: 'title', level: 0, kills: 0, totalKills: 0,
+  flashColor: 'rgba(255,0,0,0.55)', flashAlpha: 0,
+  muzzle: 0, hurtTimer: 0, muted: false,
+  shake: 0,           // screen shake magnitude (decays)
+  recoil: 0,          // recoil pitch kick (decays back to 0)
+  hitMarker: 0,       // hit confirmation timer (crosshair flash)
+};
+
+const player = {
+  x: 0, y: 0, dir: 0, pitch: 0,
+  health: 100, armor: 0, ammo: 50, maxAmmo: 200,
+  weapon: 'pistol',
+  weapons: { pistol: true, shotgun: false, chaingun: false },
+  keys: 0,
+  bob: 0, weaponAnim: 0, shootCd: 0,
+  weaponSwitch: 0, // 0..1, hides weapon during switch
+};
+
+const WEAPONS = {
+  pistol:   { name: 'PISTOL',   dmg: 18, rate: 0.38, spread: 0.02, auto: false, cost: 1, pellets: 1, sfx: 'pistol' },
+  shotgun:  { name: 'SHOTGUN',  dmg: 14, rate: 0.85, spread: 0.14, auto: false, cost: 1, pellets: 7, sfx: 'shotgun' },
+  chaingun: { name: 'CHAINGUN', dmg: 11, rate: 0.09, spread: 0.08, auto: true,  cost: 1, pellets: 1, sfx: 'chaingun' },
+};
+
+let map = [], MAP_W = 0, MAP_H = 0;
+let enemies = [], pickups = [], projectiles = [], particles = [];
+let exitTile = null;
+let textures = {}, sprites = {};
+let doorMap = {}; // key "x,y" -> { open: 0..1, opening: bool, locked: bool }
+
+const NUM_LEVELS = 3; // procedural levels
+
+/* 2. AUDIO — procedural WebAudio SFX */
+const SFX = {
+  ctx: null, master: null, ambient: null, ambientGain: null,
+  init() {
+    if (this.ctx) { this.ctx.resume(); return; }
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
+      this.startAmbient();
+    } catch(e) { /* no audio */ }
+  },
+  setMuted(m) {
+    game.muted = m;
+    if (this.master) this.master.gain.value = m ? 0 : 0.5;
+  },
+  startAmbient() {
+    if (!this.ctx) return;
+    // low drone for atmosphere
+    this.ambient = this.ctx.createOscillator();
+    this.ambient.type = 'sawtooth';
+    this.ambient.frequency.value = 55;
+    this.ambientGain = this.ctx.createGain();
+    this.ambientGain.gain.value = 0.04;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass'; filt.frequency.value = 120;
+    this.ambient.connect(filt).connect(this.ambientGain).connect(this.master);
+    this.ambient.start();
+    // slow LFO on the drone pitch for unease
+    const lfo = this.ctx.createOscillator();
+    lfo.frequency.value = 0.1;
+    const lfoGain = this.ctx.createGain(); lfoGain.gain.value = 8;
+    lfo.connect(lfoGain).connect(this.ambient.frequency);
+    lfo.start();
+  },
+  noiseBuf(dur) {
+    const sr = this.ctx.sampleRate;
+    const b = this.ctx.createBuffer(1, sr * dur, sr);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  },
+  play(type) {
+    if (!this.ctx || game.muted) return;
+    const t = this.ctx.currentTime;
+    switch(type) {
+      case 'pistol': this._shot(0.06, 0.35, 800, 80); break;
+      case 'shotgun': this._shot(0.12, 0.5, 600, 50); this._noise(0.15, 0.4, 3000, 100); break;
+      case 'chaingun': this._shot(0.04, 0.2, 1000, 120); break;
+      case 'enemyHit': this._noise(0.05, 0.2, 1500, 300); break;
+      case 'enemyDeath': this._noise(0.2, 0.35, 800, 100); this._tone(80, 0.2, 0.2, 'sawtooth'); break;
+      case 'demonDeath': this._noise(0.3, 0.4, 600, 80); this._tone(50, 0.3, 0.3, 'sawtooth'); break;
+      case 'playerHurt': this._tone(200, 0.12, 0.3, 'square'); this._noise(0.08, 0.15, 800, 200); break;
+      case 'pickup': this._tone(660, 0.08, 0.2, 'square'); setTimeout(()=>this._tone(880, 0.08, 0.2, 'square'), 60); break;
+      case 'keyPickup': this._tone(440, 0.1, 0.25, 'square'); setTimeout(()=>this._tone(660, 0.1, 0.25, 'square'), 80); setTimeout(()=>this._tone(880, 0.12, 0.25, 'square'), 160); break;
+      case 'doorOpen': this._tone(300, 0.15, 0.2, 'sawtooth'); this._tone(200, 0.2, 0.15, 'sine'); break;
+      case 'doorLocked': this._tone(150, 0.15, 0.3, 'square'); break;
+      case 'fireball': this._tone(180, 0.1, 0.15, 'sawtooth'); this._noise(0.1, 0.1, 600, 200); break;
+      case 'reload': this._tone(120, 0.08, 0.15, 'square'); break;
+    }
+  },
+  _tone(freq, dur, gain, type) {
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = type || 'sine'; o.frequency.value = freq;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(this.master);
+    o.start(t); o.stop(t + dur);
+  },
+  _shot(dur, gain, fStart, fEnd) {
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(fStart, t);
+    o.frequency.exponentialRampToValueAtTime(fEnd, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(this.master);
+    o.start(t); o.stop(t + dur);
+  },
+  _noise(dur, gain, fStart, fEnd) {
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf(dur);
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(fStart, t);
+    filt.frequency.exponentialRampToValueAtTime(fEnd, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(filt).connect(g).connect(this.master);
+    src.start(t);
+  },
+};
+
+/* 3. PROCEDURAL MAP GENERATOR
+   Rooms + corridors approach. Places player, exit, doors, keys, enemies, items. */
+function setChar(str, i, ch) { return str.substring(0, i) + ch + str.substring(i + 1); }
+
+function generateLevel(idx) {
+  const W = 24, H = 24;
+  const g = [];
+  for (let y = 0; y < H; y++) { let row = ''; for (let x = 0; x < W; x++) row += '#'; g.push(row); }
+
+  const rooms = [];
+  const numRooms = 5 + Math.min(idx, 3) + Math.floor(Math.random() * 3);
+  let attempts = 0;
+  while (rooms.length < numRooms && attempts < 60) {
+    attempts++;
+    const rw = 4 + Math.floor(Math.random() * 5);
+    const rh = 4 + Math.floor(Math.random() * 5);
+    const rx = 1 + Math.floor(Math.random() * (W - rw - 2));
+    const ry = 1 + Math.floor(Math.random() * (H - rh - 2));
+    // check no overlap
+    let ok = true;
+    for (const r of rooms) {
+      if (rx < r.x + r.w + 1 && rx + rw + 1 > r.x && ry < r.y + r.h + 1 && ry + rh + 1 > r.y) { ok = false; break; }
+    }
+    if (!ok) continue;
+    rooms.push({ x: rx, y: ry, w: rw, h: rh, cx: rx + (rw / 2 | 0), cy: ry + (rh / 2 | 0) });
+    for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) g[y] = setChar(g[y], x, '.');
+  }
+
+  // connect rooms in order with L-corridors
+  for (let i = 1; i < rooms.length; i++) {
+    const a = rooms[i - 1], b = rooms[i];
+    const hFirst = Math.random() < 0.5;
+    if (hFirst) { carveH(g, a.cx, b.cx, a.cy); carveV(g, a.cy, b.cy, b.cx); }
+    else        { carveV(g, a.cy, b.cy, a.cx); carveH(g, a.cx, b.cx, b.cy); }
+  }
+  // extra connection for loops
+  if (rooms.length > 3) {
+    const a = rooms[0], b = rooms[rooms.length - 1];
+    carveH(g, a.cx, b.cx, a.cy); carveV(g, a.cy, b.cy, b.cx);
+  }
+
+  const start = { x: rooms[0].cx + 0.5, y: rooms[0].cy + 0.5, dir: 0 };
+  // exit in last room
+  const exitRoom = rooms[rooms.length - 1];
+  g[exitRoom.cy] = setChar(g[exitRoom.cy], exitRoom.cx, 'X');
+
+  // Helper: find doorway positions for a room. A doorway is a floor tile
+  // adjacent to the room where the two perpendicular neighbors are walls
+  // (i.e., a 1-wide passage). This ensures doors look correct (only 2 faces).
+  function findDoorways(r) {
+    const result = [];
+    for (let y = r.y - 1; y <= r.y + r.h; y++) {
+      for (let x = r.x - 1; x <= r.x + r.w; x++) {
+        if (y < 0 || y >= H || x < 0 || x >= W) continue;
+        if (g[y][x] !== '.') continue;
+        // Must be adjacent to the room (not a corner diagonal)
+        const touchesRoom =
+          (g[y-1] && g[y-1][x] === '.') || (g[y+1] && g[y+1][x] === '.') ||
+          (g[y][x-1] === '.') || (g[y][x+1] === '.');
+        if (!touchesRoom) continue;
+        // Check for horizontal passage: walls on left and right, open top/bottom
+        const wallL = x > 0 && g[y][x-1] === '#';
+        const wallR = x < W-1 && g[y][x+1] === '#';
+        const openT = y > 0 && g[y-1][x] === '.';
+        const openB = y < H-1 && g[y+1][x] === '.';
+        if (wallL && wallR && (openT || openB)) { result.push({ x, y }); continue; }
+        // Check for vertical passage: walls on top and bottom, open left/right
+        const wallT = y > 0 && g[y-1][x] === '#';
+        const wallB = y < H-1 && g[y+1][x] === '#';
+        const openL = x > 0 && g[y][x-1] === '.';
+        const openR = x < W-1 && g[y][x+1] === '.';
+        if (wallT && wallB && (openL || openR)) { result.push({ x, y }); continue; }
+      }
+    }
+    return result;
+  }
+
+  // place doors at some room boundaries
+  const doorPositions = [];
+  for (let i = 1; i < rooms.length; i++) {
+    if (Math.random() < 0.45) {
+      const candidates = findDoorways(rooms[i]);
+      if (candidates.length) {
+        const c = candidates[Math.floor(Math.random() * candidates.length)];
+        g[c.y] = setChar(g[c.y], c.x, 'D');
+        doorPositions.push({ x: c.x, y: c.y, locked: false });
+      }
+    }
+  }
+
+  // locked door guarding the exit room
+  {
+    const candidates = findDoorways(exitRoom);
+    if (candidates.length) {
+      const c = candidates[Math.floor(Math.random() * candidates.length)];
+      g[c.y] = setChar(g[c.y], c.x, 'L'); // locked door
+      doorPositions.push({ x: c.x, y: c.y, locked: true });
+    }
+  }
+
+  // red key in a random non-exit, non-start room (so it's always reachable
+  // before the locked door guarding the exit)
+  const keyRoomIdx = 1 + Math.floor(Math.random() * Math.max(1, rooms.length - 2));
+  const keyRoom = rooms[Math.min(keyRoomIdx, rooms.length - 2)];
+  const pickups = [];
+  pickups.push({ x: keyRoom.cx + 0.5, y: keyRoom.cy + 0.5, type: 'redkey' });
+
+  // weapons / items in rooms
+  const itemTypes = ['medkit', 'ammo', 'armor', 'shotgun', 'ammo', 'medkit', 'chaingun'];
+  for (let i = 1; i < rooms.length - 1; i++) {
+    const r = rooms[i];
+    if (Math.random() < 0.7) {
+      const type = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+      const px = r.x + 1 + Math.floor(Math.random() * (r.w - 1)) + 0.5;
+      const py = r.y + 1 + Math.floor(Math.random() * (r.h - 1)) + 0.5;
+      pickups.push({ x: px, y: py, type });
+    }
+  }
+
+  // enemies in rooms (not the first room)
+  const enemyTypes = idx === 0 ? ['zombie', 'zombie', 'imp']
+                  : idx === 1 ? ['zombie', 'imp', 'sergeant', 'imp']
+                  :             ['zombie', 'imp', 'sergeant', 'demon', 'sergeant'];
+  const enemies = [];
+  for (let i = 1; i < rooms.length; i++) {
+    const r = rooms[i];
+    const count = 1 + Math.floor(Math.random() * 2);
+    for (let j = 0; j < count; j++) {
+      const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+      const ex = r.x + 1 + Math.floor(Math.random() * (r.w - 1)) + 0.5;
+      const ey = r.y + 1 + Math.floor(Math.random() * (r.h - 1)) + 0.5;
+      enemies.push({ x: ex, y: ey, type });
+    }
+  }
+
+  return { grid: g, playerStart: start, enemies, pickups, doors: doorPositions, name: `LEVEL ${idx + 1}` };
+}
+
+function carveH(g, x1, x2, y) {
+  if (x1 > x2) { const t = x1; x1 = x2; x2 = t; }
+  for (let x = x1; x <= x2; x++) if (g[y][x] === '#') g[y] = setChar(g[y], x, '.');
+}
+function carveV(g, y1, y2, x) {
+  if (y1 > y2) { const t = y1; y1 = y2; y2 = t; }
+  for (let y = y1; y <= y2; y++) if (g[y][x] === '#') g[y] = setChar(g[y], x, '.');
+}
+
+/* 4. PROCEDURAL TEXTURES */
+function makeCanvas(size) { const c = document.createElement('canvas'); c.width = c.height = size; return c; }
+function texFromCanvas(c) { return c.getContext('2d').getImageData(0, 0, c.width, c.height); }
+function noise(ctx, s, count, base, vary, alpha) {
+  for (let i = 0; i < count; i++) {
+    const v = base + Math.random() * vary | 0;
+    ctx.fillStyle = `rgba(${v},${v*0.9|0},${v*0.8|0},${alpha})`;
+    ctx.fillRect(Math.random()*s|0, Math.random()*s|0, 1+Math.random()*2|0, 1+Math.random()*2|0);
+  }
+}
+function genTextures() {
+  const stone = makeCanvas(TEX); const sctx = stone.getContext('2d');
+  sctx.fillStyle = '#3a342e'; sctx.fillRect(0,0,TEX,TEX);
+  noise(sctx, TEX, 280, 40, 50, 0.9);
+  sctx.fillStyle = '#1a1714';
+  for (let y = 0; y < TEX; y += 8) sctx.fillRect(0, y, TEX, 1);
+  for (let x = 0; x < TEX; x += 8) sctx.fillRect(x, 0, 1, TEX);
+  sctx.strokeStyle = 'rgba(20,15,12,0.7)'; sctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) { sctx.beginPath(); sctx.moveTo(Math.random()*TEX, Math.random()*TEX); sctx.lineTo(Math.random()*TEX, Math.random()*TEX); sctx.stroke(); }
+
+  const brick = makeCanvas(TEX); const bctx = brick.getContext('2d');
+  bctx.fillStyle = '#1a0a08'; bctx.fillRect(0,0,TEX,TEX);
+  const rowH = 8, brickW = 16;
+  for (let row = 0; row * rowH < TEX; row++) {
+    const off = (row % 2) * (brickW/2);
+    for (let bx = -1; bx * brickW + off < TEX; bx++) {
+      const x = bx * brickW + off, y = row * rowH;
+      const r = 100 + Math.random()*40 | 0, g = 40 + Math.random()*20 | 0, b = 25 + Math.random()*15 | 0;
+      bctx.fillStyle = `rgb(${r},${g},${b})`; bctx.fillRect(x+1, y+1, brickW-2, rowH-2);
+    }
+  }
+  noise(bctx, TEX, 120, 80, 40, 0.4);
+
+  const exit = makeCanvas(TEX); const ectx = exit.getContext('2d');
+  ectx.fillStyle = '#2a1a0a'; ectx.fillRect(0,0,TEX,TEX);
+  ectx.fillStyle = '#5a3a1a'; ectx.fillRect(2,2,TEX-4,TEX-4);
+  ectx.fillStyle = '#3a1a08'; ectx.fillRect(4,4,TEX-8,TEX-8);
+  const grad = ectx.createLinearGradient(0,4,0,TEX-4);
+  grad.addColorStop(0, '#88ff66'); grad.addColorStop(0.5, '#22aa44'); grad.addColorStop(1, '#114422');
+  ectx.fillStyle = grad; ectx.fillRect(8,6,TEX-16,TEX-12);
+  ectx.fillStyle = '#0a2210';
+  for (let y = 12; y < 20; y++) for (let x = 10; x < TEX-10; x += 3) if ((x+y) % 6 === 0) ectx.fillRect(x, y, 2, 2);
+
+  // Normal door — fills the cell face like a wall, with a visible door panel.
+  // The door has a stone frame around a wooden door with planks and hardware.
+  const door = makeCanvas(TEX); const dctx = door.getContext('2d');
+  // Stone wall background (matches surrounding walls)
+  dctx.fillStyle = '#3a342e'; dctx.fillRect(0,0,TEX,TEX);
+  noise(dctx, TEX, 100, 40, 50, 0.7);
+  dctx.fillStyle = '#1a1714';
+  for (let y = 0; y < TEX; y += 8) dctx.fillRect(0, y, TEX, 1);
+  // Darker door frame (recessed look)
+  dctx.fillStyle = '#1a0e06'; dctx.fillRect(5, 2, TEX-10, TEX-4);
+  dctx.fillStyle = '#2a1808'; dctx.fillRect(6, 3, TEX-12, TEX-6);
+  // Wooden door panel
+  dctx.fillStyle = '#5a3010'; dctx.fillRect(7, 4, TEX-14, TEX-8);
+  dctx.fillStyle = '#7a4818'; dctx.fillRect(8, 5, TEX-16, TEX-10);
+  dctx.fillStyle = '#4a2808'; dctx.fillRect(9, 6, TEX-18, TEX-12);
+  // Horizontal wood planks
+  dctx.fillStyle = '#3a2008';
+  for (let py = 8; py < TEX-8; py += 5) dctx.fillRect(9, py, TEX-18, 1);
+  // Rivets
+  dctx.fillStyle = '#aa8822';
+  dctx.fillRect(11, 8, 2, 2); dctx.fillRect(TEX-13, 8, 2, 2);
+  dctx.fillRect(11, TEX-10, 2, 2); dctx.fillRect(TEX-13, TEX-10, 2, 2);
+  // Handle
+  dctx.fillStyle = '#ddaa22'; dctx.fillRect(TEX-13, TEX/2-1, 3, 3);
+
+  // Locked door — same structure but red door with key symbol
+  const locked = makeCanvas(TEX); const lctx = locked.getContext('2d');
+  lctx.fillStyle = '#3a342e'; lctx.fillRect(0,0,TEX,TEX);
+  noise(lctx, TEX, 100, 40, 50, 0.7);
+  lctx.fillStyle = '#1a1714';
+  for (let y = 0; y < TEX; y += 8) lctx.fillRect(0, y, TEX, 1);
+  lctx.fillStyle = '#1a0606'; lctx.fillRect(5, 2, TEX-10, TEX-4);
+  lctx.fillStyle = '#2a0808'; lctx.fillRect(6, 3, TEX-12, TEX-6);
+  lctx.fillStyle = '#5a1010'; lctx.fillRect(7, 4, TEX-14, TEX-8);
+  lctx.fillStyle = '#8a2020'; lctx.fillRect(8, 5, TEX-16, TEX-10);
+  lctx.fillStyle = '#6a1818'; lctx.fillRect(9, 6, TEX-18, TEX-12);
+  // Key symbol
+  lctx.fillStyle = '#ff4444';
+  lctx.fillRect(TEX/2-4, 10, 8, 3); lctx.fillRect(TEX/2-4, 10, 3, 8);
+  lctx.fillRect(TEX/2-4, 16, 5, 2); lctx.fillRect(TEX/2+1, 16, 2, 2);
+  // Rivets
+  lctx.fillStyle = '#aa8822';
+  lctx.fillRect(11, 8, 2, 2); lctx.fillRect(TEX-13, 8, 2, 2);
+  lctx.fillRect(11, TEX-10, 2, 2); lctx.fillRect(TEX-13, TEX-10, 2, 2);
+
+  return { '#': texFromCanvas(stone), 'B': texFromCanvas(brick), 'X': texFromCanvas(exit),
+           'D': texFromCanvas(door), 'L': texFromCanvas(locked) };
+}
+
+/* 5. PROCEDURAL SPRITES */
+function makeSpriteCtx(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return { c, ctx: c.getContext('2d') }; }
+function drawPix(ctx, rows, palette) {
+  for (let y = 0; y < rows.length; y++) {
+    const row = rows[y];
+    for (let x = 0; x < row.length; x++) {
+      const ch = row[x];
+      if (ch === ' ' || ch === '.') continue;
+      ctx.fillStyle = palette[ch] || '#ff00ff';
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+}
+function genSprites() {
+  const sp = {};
+
+  // === ZOMBIE 24x32 — undead soldier, tattered uniform, glowing eyes, exposed bone
+  {
+    const { c, ctx } = makeSpriteCtx(24, 32);
+    drawPix(ctx, [
+      '........KKKKKK........',
+      '.......KSSSSSSK.......',
+      '......KSSSSSSSSK......',
+      '.....KSSDDDDSSSSK.....',
+      '....KSSDDDDDDSSSSK....',
+      '....KSDRRRRRRDSSSK....',
+      '....KSDRGGGGRDSSSK....',
+      '....KSDRGGGGRDSSSK....',
+      '....KSSDRRRRRDSSSK....',
+      '.....KSSSSSSSSSSK.....',
+      '......KKSSSSSSKK......',
+      '...NNNNNKKKKNNNNNN....',
+      '..NNNNNNKKKKNNNNNNN...',
+      '..NNNNKKKSSKKKNNNNN...',
+      '..NNNKKSSSSSSKKNNNN...',
+      '..NNKKSSSSSSSSKKNNN...',
+      '...KKSSSSSSSSSSKKN....',
+      '....KSSSSSSSSSSK......',
+      '....KSSSSSSSSSSK......',
+      '....KSSSSSSSSSSK......',
+      '....KKSSSSSSSSKK......',
+      '.....KSSSSSSSSK.......',
+      '.....KSSSSSSSSK.......',
+      '.....KSSSSSSSSK.......',
+      '.....BBSSSSSSBB.......',
+      '.....BBSSSSSSBB.......',
+      '.....BB......BB.......',
+      '.....BB......BB.......',
+      '.....BB......BB.......',
+      '.....BB......BB.......',
+      '.....MM......MM.......',
+      '.....MM......MM.......',
+    ], { K:'#0d0d0d', S:'#5a8a4a', D:'#3a5a2a', R:'#aa1111', G:'#ffff44',
+         N:'#2a3a1a', B:'#1a2a0a', M:'#0a0a04' });
+    sp.zombie = ctx.getImageData(0,0,24,32);
+    const { c: c2, ctx: ctx2 } = makeSpriteCtx(24, 8);
+    ctx2.fillStyle = '#3a5a2a'; ctx2.fillRect(0,2,24,4);
+    ctx2.fillStyle = '#aa1111'; ctx2.fillRect(3,3,18,2);
+    ctx2.fillStyle = '#1a1a1a';
+    ctx2.fillRect(5,4,2,1); ctx2.fillRect(11,4,2,1); ctx2.fillRect(17,4,2,1);
+    sp.zombie_dead = ctx2.getImageData(0,0,24,8);
+  }
+
+  // === IMP 24x32 — demonic, large horns, glowing eyes, fire aura, muscular
+  {
+    const { c, ctx } = makeSpriteCtx(24, 32);
+    drawPix(ctx, [
+      '....KK..........KK....',
+      '...KHHK........KHHK...',
+      '..KHFHK........KHFHK..',
+      '..KHFHK........KHFHK..',
+      '...KHHK........KHHK...',
+      '....KKHHHHHHHHHHKK....',
+      '...HHHHHHHHHHHHHHHH...',
+      '..HHRRRRRRRRRRRRRRHH..',
+      '..HRRYYYYYYRRYYYYRRH..',
+      '..HRRYYYYYYRRYYYYRRH..',
+      '..HRRRRRRRRRRRRRRRRH..',
+      '..HHHHHHHHHHHHHHHHHH..',
+      '...HHHHHHHHHHHHHHHH...',
+      '.BBHHHHHHHHHHHHHHHHBB.',
+      'BBBHHHHHHHHHHHHHHHHBBB',
+      'BBBHHHHHHHHHHHHHHHHBBB',
+      '.BBHHHHHHHHHHHHHHHHBB.',
+      '..HHHHHHHHHHHHHHHHHH..',
+      '..HHRRRRRRRRRRRRRRHH..',
+      '..HRRRRRRRRRRRRRRRRH..',
+      '...RRRRRRRRRRRRRRRR...',
+      '...RR..RR..RR..RR.....',
+      '...RR..RR..RR..RR.....',
+      '...RR..RR..RR..RR.....',
+      '...RR..RR..RR..RR.....',
+      '...RR..RR..RR..RR.....',
+      '...RR..RR..RR..RR.....',
+      '...RR..RR..RR..RR.....',
+      '...CC..CC..CC..CC.....',
+      '...CC..CC..CC..CC.....',
+      '...YY..YY..YY..YY.....',
+      '...YY..YY..YY..YY.....',
+    ], { K:'#1a0a0a', H:'#8a4a1a', F:'#ffaa22', R:'#cc2211', Y:'#ffdd33',
+         B:'#6a3a0a', C:'#220a0a' });
+    sp.imp = ctx.getImageData(0,0,24,32);
+    const { c: c2, ctx: ctx2 } = makeSpriteCtx(24, 8);
+    ctx2.fillStyle = '#6a3a0a'; ctx2.fillRect(0,2,24,4);
+    ctx2.fillStyle = '#cc2211'; ctx2.fillRect(3,3,18,2);
+    sp.imp_dead = ctx2.getImageData(0,0,24,8);
+  }
+
+  // === SERGEANT 24x32 — shotgun guy, combat helmet, vest, visible shotgun
+  {
+    const { c, ctx } = makeSpriteCtx(24, 32);
+    drawPix(ctx, [
+      '........KKKKKK........',
+      '.......KKKKKKKK.......',
+      '......KSSSSSSSSK......',
+      '.....KSSSSSSSSSSK.....',
+      '....KSSSDDDDSSSSK.....',
+      '....KSSSDDDDSSSSK.....',
+      '....KSSDEEEEDDSSK.....',
+      '....KSSEEEEEESSK......',
+      '.....KSSSSSSSSK.......',
+      '......KKSSSSKK........',
+      '...VVVVVKKKKVVVVV.....',
+      '..VVVVVVKKKKVVVVVV....',
+      '..VVVVKKSSSSKKVVVV....',
+      '..VVKKSSSSSSSSKKVV....',
+      '..VKSSSSSSSSSSSSKV....',
+      '..VKSSSSKKKKSSSSKV....',
+      '..VSSSSKGGGKSSSSSV....',
+      '..VSSSSKGGGKSSSSSV....',
+      '...VSSSKKKKSSSSSV.....',
+      '....VSSSSSSSSSSV......',
+      '....VSSSSSSSSSSV......',
+      '....VVSSSSSSSSVV......',
+      '.....VSSSSSSSSV.......',
+      '.....VSSSSSSSSV.......',
+      '.....BBSSSSSSBB.......',
+      '.....BBSSSSSSBB.......',
+      '.....BB......BB.......',
+      '.....BB......BB.......',
+      '.....BB......BB.......',
+      '.....BB......BB.......',
+      '.....MM......MM.......',
+      '.....MM......MM.......',
+    ], { K:'#0d0d0d', S:'#d4a878', D:'#8a6038', E:'#221100',
+         V:'#3a2a10', G:'#888888', B:'#1a1a0a', M:'#0a0a04' });
+    sp.sergeant = ctx.getImageData(0,0,24,32);
+    const { c: c2, ctx: ctx2 } = makeSpriteCtx(24, 8);
+    ctx2.fillStyle = '#3a2a10'; ctx2.fillRect(0,2,24,4);
+    ctx2.fillStyle = '#8a1a1a'; ctx2.fillRect(3,3,18,2);
+    sp.sergeant_dead = ctx2.getImageData(0,0,24,8);
+  }
+
+  // === DEMON 28x24 — pink beast, huge fanged mouth, muscular, horns
+  {
+    const { c, ctx } = makeSpriteCtx(28, 24);
+    drawPix(ctx, [
+      '..KK..............KK....',
+      '.KHHK............KHHK...',
+      'KHFHK............KHFHK..',
+      '.KHHK............KHHK...',
+      '..KKPPPPPPPPPPPPPPKK....',
+      '.PPPPPPPPPPPPPPPPPPPP...',
+      'PPPPPPPPPPPPPPPPPPPPPP..',
+      'PPWWWWWWPPPPPPPPWWWWWWP.',
+      'PWWKKKKWWPPPPPPWWKKKKWWP',
+      'PWKYYYYKWPPPPPPWKYYYYKWP',
+      'PWKYYYYKWPPPPPPWKYYYYKWP',
+      'PWWKKKKWWPPPPPPWWKKKKWWP',
+      'PPWWWWWWPPPPPPPPWWWWWWP.',
+      'PPPPPPPPPPPPPPPPPPPPPP..',
+      'PPPPPPPPPPPPPPPPPPPPPP..',
+      'PPRRRRRRRRRRRRRRRRRRPP..',
+      'PRRKKRRKKRRRRRRKKRRKKRR.',
+      'PRRKKRRKKRRRRRRKKRRKKRR.',
+      '.PRRRRRRRRRRRRRRRRRRRP..',
+      '..PRRRRRRRRRRRRRRRRRP...',
+      '...CC..CC......CC..CC...',
+      '...CC..CC......CC..CC...',
+      '...CC..CC......CC..CC...',
+      '...YY..YY......YY..YY...',
+    ], { K:'#1a0a0a', H:'#ffaa22', F:'#ffdd33', P:'#cc5566',
+         W:'#ffffff', Y:'#ffdd33', R:'#880022', C:'#220a0a' });
+    sp.demon = ctx.getImageData(0,0,28,24);
+    const { c: c2, ctx: ctx2 } = makeSpriteCtx(28, 8);
+    ctx2.fillStyle = '#cc5566'; ctx2.fillRect(0,2,28,4);
+    ctx2.fillStyle = '#880022'; ctx2.fillRect(3,3,22,2);
+    sp.demon_dead = ctx2.getImageData(0,0,28,8);
+  }
+
+  // Shotgun pickup 20x12
+  {
+    const { c, ctx } = makeSpriteCtx(20, 10);
+    drawPix(ctx, [
+      '....KKKKKKKKKKK..','...KBBBBBBBBBBBK.','..KBWWWWWWWWWWBK.','..KBWKBBBBBBKWBK.',
+      '..KBWKBYYYYBKBK..','..KBWKKKKKKKKBK..','..KBWWWWWWWWBK...','..KBBBBBBBBBBK...',
+      '..KKKKKKKKKKKK...','..K..........K...',
+    ], { K:'#1a1a1a', B:'#3a1a08', W:'#888888', Y:'#ffcc22' });
+    sp.shotgun = ctx.getImageData(0,0,20,10);
+  }
+
+  // Chaingun pickup
+  {
+    const { c, ctx } = makeSpriteCtx(20, 12);
+    drawPix(ctx, [
+      '.................K.','...KKKKKKKKKKKKKKK.','..KGGGGGGGGGGGGGGK.','..KGGGGGGGGGGGGGGK.',
+      '..KGGKKKKKGGGGGGGK.','..KGGKYYYKGGGGGGGK.','..KGGKKKKKGGGGGGGK.','..KGGGGGGGGGGGGGGK.',
+      '..KKKKKKKKKKKKKKKK.','....K..........K...','....K..........K...','....K..........K...',
+    ], { K:'#1a1a1a', G:'#555555', Y:'#ffcc22' });
+    sp.chaingun = ctx.getImageData(0,0,20,12);
+  }
+
+  // Medkit — white box with a bold GREEN PLUS (health icon)
+  {
+    const { c, ctx } = makeSpriteCtx(14, 12);
+    drawPix(ctx, [
+      '..KKKKKKKKKK..','.KWWWWWWWWWWK.','.KWWWWWWWWWWK.','.KWWGGGGGGWWK.',
+      '.KWWGGGGGGWWK.','.KWWWGGGGWWWK.','.KWWWGGGGWWWK.','.KWWGGGGGGWWK.',
+      '.KWWGGGGGGWWK.','.KWWWWWWWWWWK.','.KWWWWWWWWWWK.','..KKKKKKKKKK..',
+    ], { K:'#1a1a1a', W:'#f0f0e8', G:'#22cc44' });
+    sp.medkit = ctx.getImageData(0,0,14,12);
+  }
+
+  // Armor — a shield shape (blue with silver highlight)
+  {
+    const { c, ctx } = makeSpriteCtx(14, 16);
+    drawPix(ctx, [
+      '...KKKKKKKK..','..KAAAAAAAAK.','.KAAAAAAAAAAK','.KAAASSAAAAAK','KAAASSSAAAAAK',
+      'KAAAAAAAAAAK','KAAAAAAAAAAK','KAAAAAAAAAAK','KAAAAAAAAAAK','.KAAAAAAAAAK',
+      '.KAAAAAAAAAK','..KAAAAAAAK.','..KAAAAAAK..','...KAAAAK...','....KAAK....','.....KK.....',
+    ], { K:'#1a1a1a', A:'#2266cc', S:'#aaeeff' });
+    sp.armor = ctx.getImageData(0,0,14,16);
+  }
+
+  // Ammo — a row of bullets (brass casings + copper tips)
+  {
+    const { c, ctx } = makeSpriteCtx(14, 10);
+    drawPix(ctx, [
+      '..KKKKKKKKKK..','.KCCCPPCCPPCPK','.KCCCPPCCPPCPK','.KCCCPPCCPPCPK',
+      '.KYYYYYYYYYYYK','.KYYYYYYYYYYYK','.KYYYYYYYYYYYK','.KYYYYYYYYYYYK',
+      '.KYYYYYYYYYYYK','..KKKKKKKKKK..',
+    ], { K:'#1a1a1a', C:'#cc8822', P:'#ffaa44', Y:'#dddd44' });
+    sp.ammo = ctx.getImageData(0,0,14,10);
+  }
+
+  // Red key card
+  {
+    const { c, ctx } = makeSpriteCtx(14, 8);
+    drawPix(ctx, [
+      '..KKKKKKKKKK..','.KRRRRRRRRRRK.','.KRKKKKKKKKRK.','.KRKYYYYYYKRK.',
+      '.KRKYYYYYYKRK.','.KRKKKKKKKKRK.','.KRRRRRRRRRRK.','..KKKKKKKKKK..',
+    ], { K:'#1a1a1a', R:'#cc1111', Y:'#ff4444' });
+    sp.redkey = ctx.getImageData(0,0,14,8);
+  }
+
+  // Fireball
+  {
+    const { c, ctx } = makeSpriteCtx(8, 8);
+    drawPix(ctx, [
+      '..YYYY..','.YOOOOY.','YOORROYO','YOORROYO','YOORROYO','YOORROYY','.YOOOOYY','..YYYY..',
+    ], { Y:'#ffdd33', O:'#ff7700', R:'#cc1100' });
+    sp.fireball = ctx.getImageData(0,0,8,8);
+  }
+
+  return sp;
+}
+
+/* 6. HUD FACE */
+const faceCanvas = document.getElementById('face');
+const faceCtx = faceCanvas.getContext('2d');
+let lastFaceKey = '';
+function drawFace(health, hurt) {
+  const tier = health > 80 ? 0 : health > 60 ? 1 : health > 40 ? 2 : health > 20 ? 3 : 4;
+  const key = hurt ? 'h' + tier : 'n' + tier;
+  if (key === lastFaceKey) return;
+  lastFaceKey = key;
+  const P = { K:'#1a0a08', S:'#caa066', D:'#8a6038', W:'#ffffff', E:'#221100', B:'#660000', T:'#3a1a0a' };
+  const faces = [
+    ['...KKKKKKKKKKKKKK...','..KSSSSSSSSSSSSSSK..','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSWWSSSSSSSSWWSSK.','.KSSWESSSSSSSSWESSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSKKSSSSSSKKSSSK.','.KSSSSKKSSSSSSKKSSK.','.KSSSSSKKKKKKKSSSSK.','.KSSSSSSSSSSSSSSSSK.','..KSSSSSSSSSSSSSSK..','...KKKKKKKKKKKKKK...'],
+    ['...KKKKKKKKKKKKKK...','..KSSSSSSSSSSSSSSK..','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSWWSSSSSSSSWWSSK.','.KSSWESSSSSSSSWESSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSKKSSSSSSKKSSSK.','.KSSSKKSSSSSSKKSSSK.','.KSSSSKKKKKKKKSSSSK.','.KSSSSSSSSSSSSSSSSK.','..KSSSSSSSSSSSSSSK..','...KKKKKKKKKKKKKK...'],
+    ['...KKKKKKKKKKKKKK...','..KSSSSSSSSSSSSSSK..','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSWWSSSSSSSSWWSSK.','.KSSWESSSSSSSSWESSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSKKKKKSSSSSSK.','.KSSSKKSSSSSSKKSSSK.','.KSSKKSSSSSSSSKKSSK.','.KSSSSKKKKKKKKSSSSK.','.KBSSSSSSSSSSSSSSSK.','..KSSSSSSSSSSSSSSK..','...KKKKKKKKKKKKKK...'],
+    ['...KKKKKKKKKKKKKK...','..KSSSSSSSSSSSSSSK..','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSWWSSSSSSSSWWSSK.','.KSSWESSSSSSSSWESSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSKKKKKSSSSSSK.','.KSSSKKSSSSSSKKSSSK.','.KSKKSSSSSSSSSSKKSK.','.KSKKKKKKKKKKKKKKSK.','.KBSSSSSSSSSSSSSSKB.','KBSSSSSSSSSSSSSSSSKB','..KSSSSSSSSSSSSSSK..'],
+    ['...KKKKKKKKKKKKKK...','..KSSSSSSSSSSSSSSK..','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSKKSSSSSSSSKKSSK.','.KSSKSSSSSSSSSKSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSKKKKKSSSSSSK.','.KSSKKSSSSSSSSKKSSK.','.KKKSSSSSSSSSSSKKKK.','.KKKKKKKKKKKKKKKKKK.','KBBBBSSSSSSSSSSSBBBK','KBBBBSSSSSSSSSSSBBBK','..KBBSSSSSSSSSSBBK..'],
+  ];
+  const hurtFace = ['...KKKKKKKKKKKKKK...','..KSSSSSSSSSSSSSSK..','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSKKSSSSSSSSKKSSK.','.KSSKKSSSSSSSSKKSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSSSSSSSSSSSSSSK.','.KSSSKKKKKKKKKKSSSK.','.KSSSKTTTTTTTTKSSSK.','.KSSSKTTTTTTTTKSSSK.','.KSSSSSSSSSSSSSSSSK.','..KSSSSSSSSSSSSSSK..','...KKKKKKKKKKKKKK...'];
+  const rows = hurt ? hurtFace : faces[tier];
+  faceCtx.clearRect(0, 0, 24, 28);
+  faceCtx.imageSmoothingEnabled = false;
+  const OX = 2, OY = 6;
+  for (let y = 0; y < rows.length; y++) {
+    const row = rows[y];
+    for (let x = 0; x < row.length; x++) {
+      const ch = row[x];
+      if (ch === '.' || ch === ' ') continue;
+      faceCtx.fillStyle = P[ch] || '#ff00ff';
+      faceCtx.fillRect(x + OX, y + OY, 1, 1);
+    }
+  }
+}
+
+/* 7. RENDERING */
+function resize() {
+  const W = window.innerWidth, H = window.innerHeight;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const targetPixels = 28000;
+  const aspect = W / H;
+  RH = Math.max(80, Math.round(Math.sqrt(targetPixels / aspect)));
+  RW = Math.max(120, Math.round(RH * aspect));
+  canvas.width = RW; canvas.height = RH;
+  buf = ctx.createImageData(RW, RH);
+  zbuf = new Float32Array(RW);
+  const d = buf.data;
+  for (let i = 0; i < d.length; i += 4) { d[i+3] = 255; }
+}
+
+// isWall: doors block unless fully open; walls always block
+function isWall(x, y) {
+  const mx = Math.floor(x), my = Math.floor(y);
+  if (my < 0 || my >= MAP_H || mx < 0 || mx >= MAP_W) return '#';
+  const c = map[my][mx];
+  if (c === '#') return '#';
+  if (c === 'B' || c === 'X') return c;
+  if (c === 'D' || c === 'L') {
+    const dk = mx + ',' + my;
+    const dr = doorMap[dk];
+    if (dr && dr.open >= 1) return false; // fully open = passable
+    return c; // closed or opening = blocks
+  }
+  return false;
+}
+
+// Update door animations
+function updateDoors(dt) {
+  for (const k in doorMap) {
+    const d = doorMap[k];
+    if (d.opening && d.open < 1) {
+      d.open = Math.min(1, d.open + dt / 0.4);
+    }
+  }
+}
+
+function renderWalls() {
+  const dirX = Math.cos(player.dir), dirY = Math.sin(player.dir);
+  const tanHalf = Math.tan(HALF_FOV);
+  const planeX = -dirY * tanHalf, planeY = dirX * tanHalf;
+  // pitch + recoil: recoil kicks the view up (positive pitch) and decays.
+  const effectivePitch = player.pitch + game.recoil;
+  const pitchShift = Math.tan(effectivePitch) * RH * 0.7;
+  const horizon = RH / 2 + pitchShift;
+  const ceilR = 24, ceilG = 16, ceilB = 14;
+  const floorR = 40, floorG = 26, floorB = 20;
+  const data = buf.data;
+
+  for (let x = 0; x < RW; x++) {
+    const cameraX = 2 * x / RW - 1;
+    const rayDirX = dirX + planeX * cameraX;
+    const rayDirY = dirY + planeY * cameraX;
+    let mapX = Math.floor(player.x), mapY = Math.floor(player.y);
+    const deltaDistX = (rayDirX === 0) ? 1e9 : Math.abs(1 / rayDirX);
+    const deltaDistY = (rayDirY === 0) ? 1e9 : Math.abs(1 / rayDirY);
+    let stepX, stepY, sideDistX, sideDistY;
+    if (rayDirX < 0) { stepX = -1; sideDistX = (player.x - mapX) * deltaDistX; }
+    else             { stepX = 1;  sideDistX = (mapX + 1 - player.x) * deltaDistX; }
+    if (rayDirY < 0) { stepY = -1; sideDistY = (player.y - mapY) * deltaDistY; }
+    else             { stepY = 1;  sideDistY = (mapY + 1 - player.y) * deltaDistY; }
+    let hit = 0, side = 0, tile = '#', guard = 0;
+    while (hit === 0 && guard++ < 80) {
+      if (sideDistX < sideDistY) { sideDistX += deltaDistX; mapX += stepX; side = 0; }
+      else                       { sideDistY += deltaDistY; mapY += stepY; side = 1; }
+      if (mapY < 0 || mapY >= MAP_H || mapX < 0 || mapX >= MAP_W) { tile = '#'; hit = 1; break; }
+      tile = map[mapY][mapX];
+      if (tile === '#' || tile === 'B' || tile === 'X') hit = 1;
+      else if (tile === 'D' || tile === 'L') {
+        const dk = mapX + ',' + mapY;
+        const dr = doorMap[dk];
+        if (!dr || dr.open < 1) hit = 1; // door blocks ray until fully open
+      }
+    }
+
+    // Doors render at the cell boundary like normal walls, but slide up
+    // as they open. This is the classic Wolfenstein approach and avoids
+    // the visual artifacts of midpoint rendering.
+    let perpDist = (side === 0) ? (sideDistX - deltaDistX) : (sideDistY - deltaDistY);
+    if (perpDist < 0.0001) perpDist = 0.0001;
+    zbuf[x] = perpDist;
+
+    const lineH = RH / perpDist;
+    const halfLine = lineH / 2;
+    let drawStart = -halfLine + horizon;
+    let drawEnd = halfLine + horizon;
+
+    // Door slide animation: shrink from bottom as it opens
+    let doorOpen = 0;
+    if (tile === 'D' || tile === 'L') {
+      const dk = mapX + ',' + mapY;
+      const dr = doorMap[dk];
+      if (dr) doorOpen = dr.open;
+      drawEnd -= doorOpen * lineH;
+    }
+
+    const ds = Math.max(0, Math.floor(drawStart));
+    const de = Math.min(RH - 1, Math.floor(drawEnd));
+
+    let wallX;
+    if (side === 0) wallX = player.y + perpDist * rayDirY;
+    else            wallX = player.x + perpDist * rayDirX;
+    wallX -= Math.floor(wallX);
+    let texX = Math.floor(wallX * TEX);
+    if ((side === 0 && rayDirX > 0) || (side === 1 && rayDirY < 0)) texX = TEX - texX - 1;
+    if (texX < 0) texX = 0; if (texX >= TEX) texX = TEX - 1;
+
+    const tex = textures[tile] || textures['#'];
+    const texData = tex.data;
+    const fog = Math.max(0.15, 1 - perpDist / 14);
+    const sideShade = (side === 1) ? 0.68 : 1.0;
+    const shade = fog * sideShade;
+
+    // Ceiling (0 to ds)
+    for (let y = 0; y < ds; y++) {
+      const pi = (y * RW + x) << 2;
+      const cy = (horizon - y) / (RH / 2);
+      const cd = cy > 0.1 ? Math.max(0.3, 1 - 1/cy / 10) : 1;
+      data[pi] = ceilR * cd; data[pi+1] = ceilG * cd; data[pi+2] = ceilB * cd; data[pi+3] = 255;
+    }
+    // Floor (de+1 to RH) — for doors, de is already offset by the slide,
+    // so the floor naturally fills the gap below the shrinking door.
+    for (let y = de + 1; y < RH; y++) {
+      const pi = (y * RW + x) << 2;
+      const fy = (y - horizon) / (RH / 2);
+      const fd = fy > 0.1 ? Math.max(0.2, 1 - 1/fy / 12) * 0.9 : 0.2;
+      data[pi] = floorR * fd; data[pi+1] = floorG * fd; data[pi+2] = floorB * fd; data[pi+3] = 255;
+    }
+
+    // Wall column
+    const effLineH = drawEnd - drawStart;
+    if (effLineH > 0) {
+      const texStep = TEX / lineH;
+      let texPos = (ds - drawStart) * texStep;
+      for (let y = ds; y <= de; y++) {
+        let texY = texPos | 0;
+        texPos += texStep;
+        if (texY < 0) texY = 0; if (texY >= TEX) texY = TEX - 1;
+        const ti = (texY * TEX + texX) << 2;
+        const pi = (y * RW + x) << 2;
+        data[pi] = texData[ti] * shade; data[pi+1] = texData[ti+1] * shade;
+        data[pi+2] = texData[ti+2] * shade; data[pi+3] = 255;
+      }
+    }
+  }
+}
+
+function renderSprites() {
+  const dirX = Math.cos(player.dir), dirY = Math.sin(player.dir);
+  const tanHalf = Math.tan(HALF_FOV);
+  const planeX = -dirY * tanHalf, planeY = dirX * tanHalf;
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+  const data = buf.data;
+  const effectivePitch = player.pitch + game.recoil;
+  const pitchShift = Math.tan(effectivePitch) * RH * 0.7;
+  const horizon = RH / 2 + pitchShift;
+
+  const list = [];
+  for (const e of enemies) {
+    if (!e.alive && !e.deadSprite) continue;
+    if (e.alive) {
+      const sp = sprites[e.type];
+      if (!sp) continue;
+      list.push({ x: e.x, y: e.y, img: sp, scale: 1.0, vOff: 0, fade: 1.0 });
+    } else {
+      // Death animation: use the living sprite, shrink + fade out
+      const sp = sprites[e.type];
+      if (!sp) continue;
+      const t = e.deathAnim; // 1.0 -> 0.0
+      const scale = 0.3 + t * 0.7;       // shrink from 1.0 to 0.3
+      const fade = t;                     // fade from 1.0 to 0.0
+      const vOff = (1 - t) * 0.5;         // sink into the floor
+      list.push({ x: e.x, y: e.y, img: sp, scale, vOff, fade });
+    }
+  }
+  for (const p of pickups) {
+    if (p.taken) continue;
+    const sp = sprites[p.type];
+    if (!sp) continue;
+    list.push({ x: p.x, y: p.y, img: sp, scale: 0.5, vOff: 0.5, bob: p.bob });
+  }
+  for (const pr of projectiles) {
+    if (!pr.alive) continue;
+    list.push({ x: pr.x, y: pr.y, img: sprites.fireball, scale: 0.35, vOff: 0.5 });
+  }
+  for (const s of list) s.dist = (s.x - player.x) ** 2 + (s.y - player.y) ** 2;
+  list.sort((a, b) => b.dist - a.dist);
+
+  for (const s of list) {
+    const dx = s.x - player.x, dy = s.y - player.y;
+    const transformX = invDet * (dirY * dx - dirX * dy);
+    const transformY = invDet * (-planeY * dx + planeX * dy);
+    if (transformY <= 0.05) continue;
+    const screenX = (RW / 2) * (1 + transformX / transformY);
+    let sprH = Math.abs(RH / transformY) * s.scale;
+    let sprW = sprH * (s.img.width / s.img.height);
+    const bobOff = s.bob ? Math.sin(s.bob) * sprH * 0.04 : 0;
+    const vOffPx = s.vOff ? s.vOff * sprH : 0;
+    const drawStartY = -sprH / 2 + horizon + vOffPx + bobOff;
+    const drawEndY   =  sprH / 2 + horizon + vOffPx + bobOff;
+    const drawStartX = -sprW / 2 + screenX;
+    const drawEndX   =  sprW / 2 + screenX;
+    const tw = s.img.width, th = s.img.height;
+    const sdata = s.img.data;
+    const fog = Math.max(0.2, 1 - transformY / 14);
+    const sx0 = Math.max(0, Math.floor(drawStartX));
+    const sx1 = Math.min(RW - 1, Math.floor(drawEndX));
+    const sy0 = Math.max(0, Math.floor(drawStartY));
+    const sy1 = Math.min(RH - 1, Math.floor(drawEndY));
+    for (let x = sx0; x <= sx1; x++) {
+      if (transformY >= zbuf[x]) continue;
+      const texX = ((x - drawStartX) / sprW * tw) | 0;
+      if (texX < 0 || texX >= tw) continue;
+      for (let y = sy0; y <= sy1; y++) {
+        const texY = ((y - drawStartY) / sprH * th) | 0;
+        if (texY < 0 || texY >= th) continue;
+        const ti = (texY * tw + texX) << 2;
+        const a = sdata[ti+3];
+        if (a < 128) continue;
+        const pi = (y * RW + x) << 2;
+        const f = fog * (s.fade !== undefined ? s.fade : 1.0);
+        data[pi] = sdata[ti] * f; data[pi+1] = sdata[ti+1] * f;
+        data[pi+2] = sdata[ti+2] * f; data[pi+3] = 255;
+      }
+    }
+  }
+}
+
+function renderWeapon() {
+  const W = canvas.width, H = canvas.height;
+  const moving = (Math.abs(joy.dx) + Math.abs(joy.dy)) > 0.1 || keyFwd || keyBack || keyLeft || keyRight;
+  if (moving) player.bob += 0.018;
+  const bobX = Math.cos(player.bob) * 6;
+  const bobY = Math.abs(Math.sin(player.bob)) * 6;
+  const recoil = player.weaponAnim * 18;
+  player.weaponAnim *= 0.85;
+  player.weaponSwitch *= 0.82; // decay switch animation
+  const switchOff = player.weaponSwitch * H * 0.5; // weapon drops down during switch
+  const pitchOff = (player.pitch + game.recoil) * H * 0.3;
+  const cx = W / 2 + bobX;
+  const cy = H - 20 - bobY + recoil - pitchOff + switchOff;
+
+  if (player.weapon === 'pistol') {
+    const w = 50, h = 40;
+    ctx.fillStyle = '#222222'; ctx.fillRect(cx - w/2, cy - h, w, h);
+    ctx.fillStyle = '#444444'; ctx.fillRect(cx - w/2 + 4, cy - h + 4, w - 8, h - 12);
+    ctx.fillStyle = '#2a1a0a'; ctx.fillRect(cx - 8, cy - 10, 16, 14);
+    ctx.fillStyle = '#111111'; ctx.fillRect(cx - 4, cy - h - 4, 8, 6);
+    if (game.muzzle > 0) {
+      ctx.fillStyle = '#ffdd66'; ctx.beginPath(); ctx.arc(cx, cy - h - 6, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff7700'; ctx.beginPath(); ctx.arc(cx, cy - h - 6, 14, 0, Math.PI * 2); ctx.fill();
+      game.muzzle -= 0.03;
+    }
+  } else if (player.weapon === 'shotgun') {
+    const w = 70, h = 44;
+    ctx.fillStyle = '#2a1a08'; ctx.fillRect(cx - w/2, cy - h, w, h);
+    ctx.fillStyle = '#5a3a1a'; ctx.fillRect(cx - w/2 + 4, cy - h + 4, w - 8, h - 14);
+    ctx.fillStyle = '#3a2a10'; ctx.fillRect(cx - w/2 + 6, cy - h + 6, w - 12, h - 18);
+    // double barrel
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(cx - 16, cy - h - 6, 12, 10);
+    ctx.fillRect(cx + 4, cy - h - 6, 12, 10);
+    // pump
+    ctx.fillStyle = '#4a3010'; ctx.fillRect(cx - 10, cy - 14, 20, 8);
+    if (game.muzzle > 0) {
+      ctx.fillStyle = '#ffdd66';
+      ctx.beginPath(); ctx.arc(cx - 10, cy - h - 8, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 10, cy - h - 8, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff7700';
+      ctx.beginPath(); ctx.arc(cx - 10, cy - h - 8, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 10, cy - h - 8, 18, 0, Math.PI * 2); ctx.fill();
+      game.muzzle -= 0.04;
+    }
+  } else {
+    // chaingun
+    const w = 80, h = 50;
+    ctx.fillStyle = '#333333'; ctx.fillRect(cx - w/2, cy - h, w, h);
+    ctx.fillStyle = '#555555'; ctx.fillRect(cx - w/2 + 6, cy - h + 6, w - 12, h - 14);
+    ctx.fillStyle = '#1a1a1a';
+    for (let i = -1; i <= 1; i++) ctx.fillRect(cx + i * 12 - 4, cy - h - 8, 8, 12);
+    ctx.fillStyle = '#2a1a0a'; ctx.fillRect(cx - 14, cy - 10, 28, 14);
+    if (game.muzzle > 0) {
+      ctx.fillStyle = '#ffdd66'; ctx.beginPath(); ctx.arc(cx, cy - h - 8, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff7700'; ctx.beginPath(); ctx.arc(cx, cy - h - 8, 18, 0, Math.PI * 2); ctx.fill();
+      game.muzzle -= 0.05;
+    }
+  }
+}
+
+function render() {
+  ctx.imageSmoothingEnabled = false;
+  renderWalls();
+  renderSprites();
+  // Screen shake: offset the blit by a random amount based on shake magnitude
+  const shakeX = game.shake > 0.1 ? (Math.random() - 0.5) * game.shake : 0;
+  const shakeY = game.shake > 0.1 ? (Math.random() - 0.5) * game.shake : 0;
+  ctx.putImageData(buf, shakeX | 0, shakeY | 0);
+  renderWeapon();
+}
+
+/* 8. GAMEPLAY */
+function loadLevel(idx) {
+  const L = generateLevel(idx);
+  game.level = idx; game.kills = 0;
+  MAP_W = L.grid[0].length; MAP_H = L.grid.length;
+  map = L.grid.slice();
+  exitTile = null;
+  doorMap = {};
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    if (map[y][x] === 'X') exitTile = { x, y };
+  }
+  // init doors
+  for (const d of L.doors) {
+    doorMap[d.x + ',' + d.y] = { open: 0, opening: false, locked: d.locked };
+  }
+  player.x = L.playerStart.x; player.y = L.playerStart.y;
+  player.dir = L.playerStart.dir; player.pitch = 0;
+  player.shootCd = 0; player.weaponAnim = 0; player.bob = 0;
+  // enemies
+  const hp = { zombie: 30, imp: 40, sergeant: 30, demon: 60 };
+  const spd = { zombie: 1.3, imp: 1.0, sergeant: 1.1, demon: 2.2 };
+  const rng = { zombie: 1.3, imp: 6.0, sergeant: 7.0, demon: 1.4 };
+  enemies = L.enemies.map(e => ({
+    x: e.x, y: e.y, type: e.type, alive: true, deadSprite: false,
+    health: hp[e.type] || 30, state: 'idle', attackCd: 0,
+    speed: spd[e.type] || 1.2, attackRange: rng[e.type] || 1.5,
+    anim: Math.random() * 6,
+    deathAnim: 0, // 1.0 = just died, decays to 0 = fully gone
+  }));
+  game.totalKills = enemies.length;
+  pickups = L.pickups.map(p => ({ x: p.x, y: p.y, type: p.type, taken: false, bob: Math.random()*6 }));
+  projectiles = []; particles = [];
+  showOverlay(false);
+  game.state = 'play';
+}
+
+function tryMove(mx, my) {
+  const r = PLAYER_RADIUS;
+  const nx = player.x + mx;
+  if (!isWall(nx + Math.sign(mx) * r, player.y - r) && !isWall(nx + Math.sign(mx) * r, player.y + r)) player.x = nx;
+  const ny = player.y + my;
+  if (!isWall(player.x - r, ny + Math.sign(my) * r) && !isWall(player.x + r, ny + Math.sign(my) * r)) player.y = ny;
+}
+
+function updatePlayer(dt) {
+  if (game.state !== 'play') return;
+  const dirX = Math.cos(player.dir), dirY = Math.sin(player.dir);
+  let mx = 0, my = 0;
+  if (joy.active) {
+    const fwd = -joy.dy, str = joy.dx;
+    mx += dirX * fwd * MOVE_SPEED * dt; my += dirY * fwd * MOVE_SPEED * dt;
+    mx += -dirY * str * STRAFE_SPEED * dt; my += dirX * str * STRAFE_SPEED * dt;
+  }
+  if (keyFwd) { mx += dirX * MOVE_SPEED * dt; my += dirY * MOVE_SPEED * dt; }
+  if (keyBack){ mx -= dirX * MOVE_SPEED * dt; my -= dirY * MOVE_SPEED * dt; }
+  if (keyLeft) { mx += -dirY * STRAFE_SPEED * dt; my += dirX * STRAFE_SPEED * dt; }
+  if (keyRight){ mx +=  dirY * STRAFE_SPEED * dt; my += -dirX * STRAFE_SPEED * dt; }
+  if (keyTurnL) player.dir -= ROT_SPEED * dt;
+  if (keyTurnR) player.dir += ROT_SPEED * dt;
+  if (keyLookUp) player.pitch = Math.min(0.8, player.pitch + PITCH_SPEED * dt);
+  if (keyLookDn) player.pitch = Math.max(-0.8, player.pitch - PITCH_SPEED * dt);
+  tryMove(mx, my);
+  if (exitTile) {
+    const ex = exitTile.x + 0.5, ey = exitTile.y + 0.5;
+    if ((player.x - ex) ** 2 + (player.y - ey) ** 2 < 0.4) winLevel();
+  }
+  for (const p of pickups) {
+    if (p.taken) continue;
+    if ((p.x - player.x) ** 2 + (p.y - player.y) ** 2 < 0.35) pickup(p);
+    p.bob += dt * 4;
+  }
+}
+
+function lineOfSight(x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 0.001) return true;
+  const steps = Math.ceil(dist / 0.1);
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (isWall(x1 + dx * t, y1 + dy * t)) return false;
+  }
+  return true;
+}
+
+function damagePlayer(amount) {
+  if (game.state !== 'play') return;
+  if (player.armor > 0) {
+    const absorbed = Math.min(player.armor, amount / 2);
+    player.armor -= absorbed; amount -= absorbed;
+  }
+  player.health -= amount;
+  game.flashColor = 'rgba(255,0,0,0.55)'; game.flashAlpha = 0.6; game.hurtTimer = 0.25;
+  SFX.play('playerHurt');
+  if (player.health <= 0) { player.health = 0; die(); }
+}
+
+function die() { game.state = 'dead'; showOverlay(true, 'YOU DIED', 'The horde got you.', 'TRY AGAIN'); }
+function winLevel() {
+  if (game.level + 1 < NUM_LEVELS) {
+    player.health = Math.min(100, player.health + 25);
+    loadLevel(game.level + 1);
+  } else {
+    game.state = 'win';
+    showOverlay(true, 'YOU ESCAPED', `${NUM_LEVELS} procedural levels cleared. Legend.`, 'PLAY AGAIN');
+  }
+}
+
+function pickup(p) {
+  p.taken = true;
+  switch (p.type) {
+    case 'shotgun':
+      player.weapons.shotgun = true; player.weapon = 'shotgun';
+      player.ammo = Math.min(player.maxAmmo, player.ammo + 12);
+      flash('rgba(255,200,40,0.4)', 0.4); SFX.play('keyPickup'); break;
+    case 'chaingun':
+      player.weapons.chaingun = true; player.weapon = 'chaingun';
+      player.ammo = Math.min(player.maxAmmo, player.ammo + 40);
+      flash('rgba(255,200,40,0.4)', 0.4); SFX.play('keyPickup'); break;
+    case 'medkit':
+      player.health = Math.min(100, player.health + 25);
+      flash('rgba(80,255,120,0.35)', 0.4); SFX.play('pickup'); break;
+    case 'armor':
+      player.armor = Math.min(100, player.armor + 50);
+      flash('rgba(80,160,255,0.35)', 0.4); SFX.play('pickup'); break;
+    case 'ammo':
+      player.ammo = Math.min(player.maxAmmo, player.ammo + 30);
+      flash('rgba(255,200,40,0.3)', 0.35); SFX.play('pickup'); break;
+    case 'redkey':
+      player.keys |= 1; // bit 0 = red key
+      flash('rgba(255,60,60,0.4)', 0.4); SFX.play('keyPickup'); break;
+  }
+}
+
+function flash(color, alpha) { game.flashColor = color; game.flashAlpha = Math.max(game.flashAlpha, alpha); }
+
+// fireWeapon — supports multi-pellet shotgun, recoil, screen shake, hit marker
+function fireWeapon() {
+  const w = WEAPONS[player.weapon];
+  if (player.shootCd > 0) return;
+  if (player.ammo < w.cost) { SFX.play('doorLocked'); return; }
+  player.ammo -= w.cost;
+  player.shootCd = w.rate;
+  player.weaponAnim = 1;
+  game.muzzle = 0.08;
+  SFX.play(w.sfx);
+
+  // Recoil: kick the view up briefly. Shotgun kicks harder.
+  const recoilKick = player.weapon === 'shotgun' ? 0.06 : player.weapon === 'chaingun' ? 0.015 : 0.03;
+  game.recoil = Math.min(0.25, game.recoil + recoilKick);
+  // Screen shake: shotgun shakes most, chaingun tiny continuous, pistol small.
+  const shakeAmt = player.weapon === 'shotgun' ? 6 : player.weapon === 'chaingun' ? 2 : 3;
+  game.shake = Math.min(10, game.shake + shakeAmt);
+
+  for (let p = 0; p < w.pellets; p++) {
+    const spread = (Math.random() - 0.5) * w.spread * 2;
+    const ang = player.dir + spread;
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    let dist = 0.2;
+    const step = 0.04;
+    let hitEnemy = false;
+    while (dist < 18) {
+      dist += step;
+      const px = player.x + dx * dist, py = player.y + dy * dist;
+      if (isWall(px, py)) { spawnDust(px, py, 4); break; }
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        const ex = e.x - px, ey = e.y - py;
+        if (ex * ex + ey * ey < 0.16) {
+          e.health -= w.dmg;
+          SFX.play('enemyHit');
+          game.hitMarker = 0.15; // crosshair flash
+          if (e.state === 'idle') e.state = 'chase';
+          if (e.health <= 0) killEnemy(e);
+          hitEnemy = true;
+          break;
+        }
+      }
+      if (hitEnemy) break;
+    }
+  }
+}
+
+function killEnemy(e) {
+  e.alive = false;
+  e.deadSprite = true;     // render during death animation
+  e.deathAnim = 1.0;       // start death animation
+  game.kills++;
+  if (e.type === 'demon') SFX.play('demonDeath');
+  else SFX.play('enemyDeath');
+}
+
+// Dust puff on hit (non-blood, gray sparks) — for wall hits only
+function spawnDust(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 0.5 + Math.random() * 1.5;
+    particles.push({ x, y, dx: Math.cos(a) * sp, dy: Math.sin(a) * sp, life: 0.3 + Math.random() * 0.2, color: '#aa8866' });
+  }
+}
+
+function spawnParticles(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 0.5 + Math.random() * 1.5;
+    particles.push({ x, y, dx: Math.cos(a) * sp, dy: Math.sin(a) * sp, life: 0.4 + Math.random() * 0.3, color });
+  }
+}
+
+function updateProjectiles(dt) {
+  for (const p of projectiles) {
+    if (!p.alive) continue;
+    const nx = p.x + p.dx * p.speed * dt, ny = p.y + p.dy * p.speed * dt;
+    if (isWall(nx, ny)) { p.alive = false; spawnParticles(p.x, p.y, '#ff7700', 5); continue; }
+    p.x = nx; p.y = ny; p.life -= dt;
+    if (p.life <= 0) { p.alive = false; continue; }
+    if (p.owner === 'enemy') {
+      const dx = p.x - player.x, dy = p.y - player.y;
+      if (dx * dx + dy * dy < 0.16) { damagePlayer(p.damage); p.alive = false; spawnParticles(p.x, p.y, '#ff7700', 6); }
+    }
+  }
+  projectiles = projectiles.filter(p => p.alive);
+  for (const pt of particles) {
+    pt.x += pt.dx * dt; pt.y += pt.dy * dt; pt.life -= dt;
+    pt.dx *= 0.92; pt.dy *= 0.92;
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+function updateEnemies(dt) {
+  if (game.state !== 'play') return;
+  for (const e of enemies) {
+    if (!e.alive) {
+      // Decay death animation; when it reaches 0, mark for removal
+      if (e.deathAnim > 0) {
+        e.deathAnim -= dt * 2.5; // ~0.4s death animation
+        if (e.deathAnim <= 0) { e.deathAnim = 0; e.deadSprite = false; }
+      }
+      continue;
+    }
+    e.anim += dt * 4;
+    const dx = player.x - e.x, dy = player.y - e.y;
+    const dist = Math.hypot(dx, dy);
+    const los = lineOfSight(e.x, e.y, player.x, player.y);
+    switch (e.state) {
+      case 'idle':
+        if (los && dist < 9) { e.state = 'chase'; }
+        break;
+      case 'chase':
+        if (dist < e.attackRange) { e.state = 'attack'; e.attackCd = 0.4; }
+        else if (los) {
+          const sp = e.speed * dt;
+          const ux = dx / dist, uy = dy / dist;
+          if (!isWall(e.x + ux * sp + Math.sign(ux)*0.2, e.y)) e.x += ux * sp;
+          if (!isWall(e.x, e.y + uy * sp + Math.sign(uy)*0.2)) e.y += uy * sp;
+        } else if (dist > 12) e.state = 'idle';
+        break;
+      case 'attack':
+        e.attackCd -= dt;
+        if (dist > e.attackRange * 1.4) { e.state = 'chase'; break; }
+        if (e.attackCd <= 0) {
+          if (e.type === 'zombie') {
+            if (dist < 1.4 && los) damagePlayer(7 + Math.random() * 5);
+            e.attackCd = 1.0;
+          } else if (e.type === 'demon') {
+            if (dist < 1.5 && los) damagePlayer(15 + Math.random() * 8);
+            e.attackCd = 0.8;
+          } else if (e.type === 'imp') {
+            const ux = dx / dist, uy = dy / dist;
+            projectiles.push({ x: e.x + ux * 0.3, y: e.y + uy * 0.3, dx: ux, dy: uy, speed: 5.0, life: 3.0, damage: 12 + Math.random() * 6, owner: 'enemy', alive: true });
+            SFX.play('fireball');
+            e.attackCd = 1.6;
+          } else if (e.type === 'sergeant') {
+            // hitscan: chance to hit based on distance + LOS
+            if (los) {
+              const hitChance = Math.max(0.2, 0.85 - dist * 0.06);
+              if (Math.random() < hitChance) damagePlayer(5 + Math.random() * 10);
+              SFX.play('pistol');
+            }
+            e.attackCd = 1.2 + Math.random() * 0.5;
+          }
+        }
+        break;
+    }
+  }
+}
+
+function updateShooting(dt) {
+  if (game.state !== 'play') return;
+  player.shootCd -= dt;
+  const w = WEAPONS[player.weapon];
+  if (shooting && (w.auto || !shotLatch) && player.shootCd <= 0) {
+    fireWeapon();
+    if (!w.auto) shotLatch = true;
+  }
+}
+
+// open door near player
+function tryOpenDoor() {
+  // check tile in front of player
+  const fx = player.x + Math.cos(player.dir) * 0.8;
+  const fy = player.y + Math.sin(player.dir) * 0.8;
+  const mx = Math.floor(fx), my = Math.floor(fy);
+  if (my < 0 || my >= MAP_H || mx < 0 || mx >= MAP_W) return false;
+  const c = map[my][mx];
+  if (c === 'D' || c === 'L') {
+    const dk = mx + ',' + my;
+    const dr = doorMap[dk];
+    if (!dr) return false;
+    if (dr.opening) return true;
+    if (c === 'L' && !(player.keys & 1)) {
+      SFX.play('doorLocked');
+      flash('rgba(255,40,40,0.2)', 0.2);
+      return false;
+    }
+    dr.opening = true;
+    SFX.play('doorOpen');
+    return true;
+  }
+  return false;
+}
+
+function interact() {
+  if (game.state !== 'play') return;
+  if (tryOpenDoor()) return;
+  if (exitTile) {
+    const ex = exitTile.x + 0.5, ey = exitTile.y + 0.5;
+    if ((player.x - ex) ** 2 + (player.y - ey) ** 2 < 1.5) { winLevel(); return; }
+  }
+  let best = null, bd = 1.0;
+  for (const p of pickups) {
+    if (p.taken) continue;
+    const d = (p.x - player.x) ** 2 + (p.y - player.y) ** 2;
+    if (d < bd) { bd = d; best = p; }
+  }
+  if (best) pickup(best);
+}
+
+function switchWeapon() {
+  const owned = ['pistol'];
+  if (player.weapons.shotgun) owned.push('shotgun');
+  if (player.weapons.chaingun) owned.push('chaingun');
+  if (owned.length < 2) return;
+  const i = owned.indexOf(player.weapon);
+  player.weapon = owned[(i + 1) % owned.length];
+  player.weaponSwitch = 1; // trigger switch animation
+  SFX.play('reload');
+}
+
+/* 9. INPUT */
+const joy = { active: false, id: -1, dx: 0, dy: 0, startX: 0, startY: 0 };
+const look = { active: false, id: -1, lastX: 0, lastY: 0 };
+let keyFwd=false, keyBack=false, keyLeft=false, keyRight=false, keyTurnL=false, keyTurnR=false;
+let keyLookUp=false, keyLookDn=false;
+let shooting = false, shotLatch = false;
+
+const stickBase = document.getElementById('stickBase');
+const stickKnob = document.getElementById('stickKnob');
+const btnShoot = document.getElementById('btnShoot');
+const btnInteract = document.getElementById('btnInteract');
+const btnWeapon = document.getElementById('btnWeapon');
+const flashEl = document.getElementById('flash');
+
+function showStick(x, y) { stickBase.style.left = x+'px'; stickBase.style.top = y+'px'; stickBase.style.display='block'; stickKnob.style.left=x+'px'; stickKnob.style.top=y+'px'; stickKnob.style.display='block'; }
+function moveStick(x, y) { stickKnob.style.left = x+'px'; stickKnob.style.top = y+'px'; }
+function hideStick() { stickBase.style.display='none'; stickKnob.style.display='none'; }
+
+function touchStart(e) {
+  if (game.state !== 'play') return;
+  for (const t of e.changedTouches) {
+    const x = t.clientX, y = t.clientY;
+    const target = document.elementFromPoint(x, y);
+    if (target && target.closest('.btn')) continue;
+    if (target && target.closest('#hud')) continue;
+    if (target && target.closest('#muteBtn')) continue;
+    e.preventDefault();
+    if (x < window.innerWidth * 0.5 && !joy.active) {
+      joy.active = true; joy.id = t.identifier; joy.startX = x; joy.startY = y; joy.dx = 0; joy.dy = 0;
+      showStick(x, y);
+    } else if (!look.active) {
+      look.active = true; look.id = t.identifier; look.lastX = x; look.lastY = y;
+    }
+  }
+}
+function touchMove(e) {
+  if (game.state !== 'play') return;
+  let handled = false;
+  for (const t of e.changedTouches) {
+    if (t.identifier === joy.id) {
+      const dx = t.clientX - joy.startX, dy = t.clientY - joy.startY;
+      const max = 60, len = Math.hypot(dx, dy), cl = Math.min(len, max);
+      const nx = len > 0 ? dx/len : 0, ny = len > 0 ? dy/len : 0;
+      joy.dx = nx * (cl/max); joy.dy = ny * (cl/max);
+      moveStick(joy.startX + nx*cl, joy.startY + ny*cl);
+      handled = true;
+    } else if (t.identifier === look.id) {
+      const dx = t.clientX - look.lastX, dy = t.clientY - look.lastY;
+      look.lastX = t.clientX; look.lastY = t.clientY;
+      player.dir += dx * 0.0050;
+      player.pitch -= dy * 0.0040;       // vertical drag = look up/down
+      player.pitch = Math.max(-0.7, Math.min(0.7, player.pitch));
+      handled = true;
+    }
+  }
+  if (handled) e.preventDefault();
+}
+function touchEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joy.id) { joy.active = false; joy.dx = 0; joy.dy = 0; hideStick(); }
+    if (t.identifier === look.id) look.active = false;
+  }
+}
+
+function bindButton(el, onDown, onUp) {
+  el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('active'); onDown(); }, { passive: false });
+  el.addEventListener('touchend',   e => { e.preventDefault(); e.stopPropagation(); el.classList.remove('active'); onUp && onUp(); }, { passive: false });
+  el.addEventListener('touchcancel',e => { e.preventDefault(); e.stopPropagation(); el.classList.remove('active'); onUp && onUp(); }, { passive: false });
+  el.addEventListener('mousedown',  e => { e.preventDefault(); e.stopPropagation(); el.classList.add('active'); onDown(); });
+  el.addEventListener('mouseup',    e => { e.preventDefault(); el.classList.remove('active'); onUp && onUp(); });
+  el.addEventListener('mouseleave', e => { el.classList.remove('active'); onUp && onUp(); });
+}
+bindButton(btnShoot, () => { shooting = true; shotLatch = false; }, () => { shooting = false; shotLatch = false; });
+bindButton(btnInteract, () => interact(), null);
+bindButton(btnWeapon, () => switchWeapon(), null);
+
+// Keyboard
+window.addEventListener('keydown', e => {
+  if (e.code === 'KeyW' || e.code === 'ArrowUp')    keyFwd = true;
+  if (e.code === 'KeyS' || e.code === 'ArrowDown')  keyBack = true;
+  if (e.code === 'KeyA') keyLeft = true;
+  if (e.code === 'KeyD') keyRight = true;
+  if (e.code === 'ArrowLeft')  keyTurnL = true;
+  if (e.code === 'ArrowRight') keyTurnR = true;
+  if (e.code === 'PageUp' || e.code === 'KeyR') keyLookUp = true;
+  if (e.code === 'PageDown' || e.code === 'KeyF') keyLookDn = true;
+  if (e.code === 'Space') { shooting = true; shotLatch = false; e.preventDefault(); }
+  if (e.code === 'KeyE') interact();
+  if (e.code === 'KeyQ') switchWeapon();
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'KeyW' || e.code === 'ArrowUp')    keyFwd = false;
+  if (e.code === 'KeyS' || e.code === 'ArrowDown')  keyBack = false;
+  if (e.code === 'KeyA') keyLeft = false;
+  if (e.code === 'KeyD') keyRight = false;
+  if (e.code === 'ArrowLeft')  keyTurnL = false;
+  if (e.code === 'ArrowRight') keyTurnR = false;
+  if (e.code === 'PageUp' || e.code === 'KeyR') keyLookUp = false;
+  if (e.code === 'PageDown' || e.code === 'KeyF') keyLookDn = false;
+  if (e.code === 'Space') { shooting = false; shotLatch = false; }
+});
+
+// Mouse look (desktop)
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+if (!isTouchDevice) {
+  document.addEventListener('click', () => {
+    if (game.state === 'play' && document.pointerLockElement !== canvas) {
+      canvas.requestPointerLock && canvas.requestPointerLock();
+    }
+  });
+}
+document.addEventListener('mousemove', e => {
+  if (document.pointerLockElement === canvas) {
+    player.dir += e.movementX * 0.0025;
+    player.pitch -= e.movementY * 0.0020;
+    player.pitch = Math.max(-0.7, Math.min(0.7, player.pitch));
+  }
+});
+document.addEventListener('mousedown', e => { if (document.pointerLockElement === canvas && e.button === 0) { shooting = true; shotLatch = false; } });
+document.addEventListener('mouseup', e => { if (e.button === 0) { shooting = false; shotLatch = false; } });
+
+/* 10. UI / LOOP */
+const overlay  = document.getElementById('overlay');
+const ovSub    = document.getElementById('ovSub');
+const ovMsg    = document.getElementById('ovMsg');
+const startBtn = document.getElementById('startBtn');
+const muteBtn  = document.getElementById('muteBtn');
+
+function showOverlay(show, sub, msg, btn) {
+  if (show) {
+    overlay.classList.remove('hidden');
+    if (sub) ovSub.textContent = sub;
+    if (msg) ovMsg.textContent = msg;
+    if (btn) startBtn.textContent = btn;
+  } else overlay.classList.add('hidden');
+}
+
+function startOrRestart() {
+  SFX.init(); // create audio context on user gesture
+  if (game.state === 'title' || game.state === 'win') {
+    player.health = 100; player.armor = 0; player.ammo = 50;
+    player.weapon = 'pistol'; player.keys = 0;
+    player.weapons.pistol = true; player.weapons.shotgun = false; player.weapons.chaingun = false;
+    player.pitch = 0;
+    loadLevel(0);
+  } else if (game.state === 'dead') {
+    player.health = 100; player.armor = 0; player.ammo = 50;
+    player.weapon = 'pistol'; player.weapons.shotgun = false; player.weapons.chaingun = false;
+    player.pitch = 0;
+    loadLevel(game.level);
+  }
+}
+let startBtnArmed = false;
+startBtn.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); startOrRestart(); startBtnArmed = true; setTimeout(() => { startBtnArmed = false; }, 500); }, { passive: false });
+startBtn.addEventListener('click', () => { if (startBtnArmed) return; startOrRestart(); });
+
+muteBtn.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); SFX.setMuted(!game.muted); muteBtn.textContent = game.muted ? '♪̸' : '♪'; }, { passive: false });
+muteBtn.addEventListener('click', () => { SFX.setMuted(!game.muted); muteBtn.textContent = game.muted ? '♪̸' : '♪'; });
+
+function updateHUD() {
+  document.getElementById('hudHealth').textContent = Math.max(0, Math.floor(player.health));
+  document.getElementById('hudArmor').textContent  = Math.max(0, Math.floor(player.armor));
+  document.getElementById('hudAmmo').textContent   = player.ammo;
+  document.getElementById('hudWeapon').textContent = WEAPONS[player.weapon].name;
+  document.getElementById('hudKeys').textContent   = (player.keys & 1) ? '1' : '0';
+  flashEl.style.background = game.flashColor;
+  flashEl.style.opacity = game.flashAlpha.toFixed(2);
+  game.flashAlpha *= 0.88;
+  if (game.flashAlpha < 0.01) game.flashAlpha = 0;
+  // Hit marker: flash crosshair when you land a hit
+  const crosshairEl = document.getElementById('crosshair');
+  if (game.hitMarker > 0) crosshairEl.classList.add('hit');
+  else crosshairEl.classList.remove('hit');
+  if (game.hurtTimer > 0) { game.hurtTimer -= 0.016; drawFace(player.health, true); }
+  else drawFace(player.health, false);
+}
+
+function loop(t) {
+  if (!lastT) lastT = t;
+  let dt = (t - lastT) / 1000; lastT = t;
+  if (dt > 0.05) dt = 0.05;
+  // Decay transient effects
+  game.recoil *= 0.88;
+  if (game.recoil < 0.001) game.recoil = 0;
+  game.shake *= 0.85;
+  if (game.shake < 0.1) game.shake = 0;
+  if (game.hitMarker > 0) game.hitMarker -= dt;
+  if (game.state === 'play') {
+    updatePlayer(dt);
+    updateEnemies(dt);
+    updateProjectiles(dt);
+    updateDoors(dt);
+    updateShooting(dt);
+    render();
+  } else {
+    if (buf) { ctx.putImageData(buf, 0, 0); renderWeapon(); }
+  }
+  updateHUD();
+  requestAnimationFrame(loop);
+}
+
+function applyOrientation() {
+  document.body.classList.toggle('portrait', window.innerHeight > window.innerWidth);
+}
+function init() {
+  canvas = document.getElementById('game');
+  ctx = canvas.getContext('2d', { alpha: false });
+  ctx.imageSmoothingEnabled = false;
+  textures = genTextures();
+  sprites = genSprites();
+  drawFace(100, false);
+  applyOrientation();
+  resize();
+  window.addEventListener('resize', () => { applyOrientation(); resize(); });
+  window.addEventListener('orientationchange', () => { setTimeout(() => { applyOrientation(); resize(); }, 200); });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { applyOrientation(); resize(); });
+  document.addEventListener('touchstart', touchStart, { passive: false });
+  document.addEventListener('touchmove',  touchMove,  { passive: false });
+  document.addEventListener('touchend',   touchEnd,   { passive: false });
+  document.addEventListener('touchcancel',touchEnd,   { passive: false });
+  window.addEventListener('contextmenu', e => e.preventDefault());
+  let lastTap = 0;
+  document.addEventListener('touchend', e => { const now = Date.now(); if (now - lastTap < 300) e.preventDefault(); lastTap = now; }, { passive: false });
+  requestAnimationFrame(loop);
+}
+init();
+</script>
+</body>
+</html>
